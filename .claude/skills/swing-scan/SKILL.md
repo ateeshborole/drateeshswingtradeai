@@ -83,9 +83,12 @@ so the next session starts with the same watchlist and plans. Say that you did.
 | `breakout` | close above the 55-day high, volume at least 1.5x the 50-day average, not a downtrend | the close (already triggered) | 10-day low or 1 ATR under the old high, whichever is higher |
 | `bull_flag` | a 15-bar run of 15 %+, then 6 bars that stay within the top half of the run, range at most half of it | above the flag high | under the flag low |
 | `base` | uptrend, close within 5 % under the 55-day high, the last 10 bars' range under 85 % of the 50-bar average | above the 55-day high | under the 10-day low |
-| `pullback_ema20` | uptrend (or weekly up and above the 200-day), stretched 2 ATR above the EMA in the last 15 bars, now back to it, RSI 35 to 60 | above today's high | under the 5-day low less 0.25 ATR |
+| `pullback_ema20` | daily uptrend, or weekly up and above the 200-day, stretched 2 ATR above the EMA in the last 15 bars, now back to it, RSI 35 to 60 | above today's high | under the 5-day low less 0.25 ATR |
 | `pullback_sma50` | the same, back to the 50-day average | above today's high | the same |
 | `oversold_dip` | above the 200-day, weekly up, RSI 14 at or under 35 | above today's high | under the 5-day low less 0.25 ATR |
+
+The pullbacks and the oversold dip need today's high within 1 ATR of the close: after a
+big down candle a buy-stop above its high would be far from the price, so no setup is given.
 
 Every stop is kept between 0.5 and 3 ATR under the entry. Prices round to the
 tick: Rs 0.05 for INR, $0.01 for USD (entries up, stops down). Targets are

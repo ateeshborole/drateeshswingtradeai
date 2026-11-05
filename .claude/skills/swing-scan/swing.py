@@ -47,8 +47,8 @@ LABELS = {
     "breakout": "Breakout: closed above its 55-day high on heavy volume",
     "bull_flag": "Bull flag: a sharp run, then a tight pause near the high",
     "base": "Tight base just under its 55-day high",
-    "pullback_ema20": "Pullback to the 20-day EMA in an uptrend",
-    "pullback_sma50": "Pullback to the 50-day average in an uptrend",
+    "pullback_ema20": "Pullback to the 20-day EMA after a run up",
+    "pullback_sma50": "Pullback to the 50-day average after a run up",
     "oversold_dip": "Oversold dip (RSI under 35) above the 200-day average",
 }
 
@@ -89,8 +89,27 @@ def norm(sym):
     s = sym.strip().upper()
     if ":" in s:
         ex, s = s.split(":", 1)
-        s += {"NSE": ".NS", "BSE": ".BO"}.get(ex, "")
+        if ex in ("NSE", "BSE"):
+            s = s.replace("_", "-") + (".NS" if ex == "NSE" else ".BO")   # TradingView NAM_INDIA = Yahoo NAM-INDIA
     return s
+
+
+def split_tickers(items, file=None):
+    """Tickers from arguments and/or a file, split on commas, spaces and new lines
+    (a TradingView watchlist export is one comma-separated line)."""
+    raw = list(items or [])
+    if file:
+        with open(file) as f:
+            raw.append(f.read())
+    out = []
+    for item in raw:
+        for t in item.replace(",", " ").split():
+            if t.startswith("###"):
+                continue        # a TradingView section header
+            n = norm(t)
+            if n and n not in out:
+                out.append(n)
+    return out
 
 
 # ----------------------------------------------------------------- data
@@ -350,7 +369,8 @@ def analyse(sym, meta, bars):
     # pullbacks: was stretched above the average in the last 15 bars, now back at it
     stretched = any(e20[j] is not None and H[j] >= e20[j] + 2 * atrs[j] for j in range(i - 15, i))
     low3 = min(L[i - 2:i + 1])
-    if up_ok and stretched and rsi[i] and 35 <= rsi[i] <= 60:
+    near = H[i] - c <= atr     # a buy-stop above today's high only makes sense near the close
+    if up_ok and stretched and near and rsi[i] and 35 <= rsi[i] <= 60:
         stop = min(L[i - 4:i + 1]) - 0.25 * atr
         if low3 <= ema20 + 0.25 * atr and c >= ema20 - 0.5 * atr:
             s = make("pullback_ema20", H[i] + t, stop)
@@ -362,7 +382,7 @@ def analyse(sym, meta, bars):
                 setups.append(s)
 
     # oversold dip above a rising long-term trend
-    if s200 and c > s200 and weekly_up and rsi[i] is not None and rsi[i] <= 35:
+    if near and s200 and c > s200 and weekly_up and rsi[i] is not None and rsi[i] <= 35:
         s = make("oversold_dip", H[i] + t, min(L[i - 4:i + 1]) - 0.25 * atr)
         if s:
             setups.append(s)
@@ -388,7 +408,7 @@ ORDER = {"TRIGGERED": 0, "SETUP": 1, "EXTENDED": 2, "NO SETUP": 3, "DOWNTREND": 
 
 
 def cmd_scan(a):
-    syms = [norm(s) for s in a.symbols.split(",")] if a.symbols else load("watchlist.json", {}).get("symbols", [])
+    syms = split_tickers([a.symbols]) if a.symbols else load("watchlist.json", {}).get("symbols", [])
     if not syms:
         sys.exit("swing.py: the watchlist is empty. Add tickers: swing.py add RELIANCE.NS TCS.NS AAPL")
     now_ts = time.time() if not a.now else dt.datetime.fromisoformat(a.now).replace(tzinfo=dt.timezone.utc).timestamp()
@@ -463,15 +483,15 @@ def print_scan(scan):
 
 def cmd_add(a):
     wl = load("watchlist.json", {"symbols": []})
-    new = [norm(s) for s in a.tickers if norm(s) not in wl["symbols"]]
+    new = [s for s in split_tickers(a.tickers, a.file) if s not in wl["symbols"]]
     wl["symbols"] += new
     save("watchlist.json", wl)
-    print("Added %s. Watchlist: %s" % (", ".join(new) or "nothing new", ", ".join(wl["symbols"])))
+    print("Added %d: %s. The watchlist has %d tickers." % (len(new), ", ".join(new) or "nothing new", len(wl["symbols"])))
 
 
 def cmd_remove(a):
     wl = load("watchlist.json", {"symbols": []})
-    gone = {norm(s) for s in a.tickers}
+    gone = set(split_tickers(a.tickers, a.file))
     wl["symbols"] = [s for s in wl["symbols"] if s not in gone]
     save("watchlist.json", wl)
     print("Watchlist: %s" % (", ".join(wl["symbols"]) or "(empty)"))
@@ -660,7 +680,8 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name, fn in (("add", cmd_add), ("remove", cmd_remove)):
         p = sub.add_parser(name)
-        p.add_argument("tickers", nargs="+")
+        p.add_argument("tickers", nargs="*")
+        p.add_argument("--file", help="a file of tickers, e.g. a TradingView watchlist export")
         p.set_defaults(fn=fn)
     sub.add_parser("list").set_defaults(fn=cmd_list)
     p = sub.add_parser("config")
